@@ -108,7 +108,7 @@ Then use `MONGODB_URI=mongodb://localhost:27017` (default).
 
 ## Deploy backend to Railway
 
-Railway runs long-lived services and supports Docker, so it fits this backend. You can run the API on Railway and use either **Railway’s MongoDB** or **MongoDB Atlas**.
+Railway runs long-lived services and will build this backend with its **default builder** (no Docker required): it detects Python, installs from `requirements.txt`, and runs the `Procfile` command. Use either **Railway’s MongoDB** or **MongoDB Atlas**.
 
 ### 1. Create a project and API service
 
@@ -116,8 +116,8 @@ Railway runs long-lived services and supports Docker, so it fits this backend. Y
 2. **New Project** → **Deploy from GitHub repo** (or **Empty Project** and connect the repo later).
 3. If the repo is the whole project (not just `backend/`):
    - Add a **service** → **GitHub Repo** → select the repo.
-   - In the new service: **Settings** → **Root Directory** → set to `backend` (so Railway uses `backend/Dockerfile`).
-4. Railway will build from the Dockerfile and run the API.
+   - In the new service: **Settings** → **Root Directory** → set to `backend`.
+4. Railway will build the Python app and start it with the `Procfile` (`uvicorn` on `$PORT`).
 
 ### 2. MongoDB: Railway or Atlas
 
@@ -141,7 +141,43 @@ Railway runs long-lived services and supports Docker, so it fits this backend. Y
 ### 3. Public URL and port
 
 1. API service → **Settings** → **Networking** → **Generate Domain** (e.g. `your-api.up.railway.app`).
-2. Railway injects `PORT`; the Dockerfile already runs uvicorn on `0.0.0.0:$PORT`. If you use the Dockerfile’s default port 8000, ensure the service is configured to use Railway’s `PORT` (the `railway.toml` in `backend/` sets the start command to use `$PORT` for compatibility).
+2. The `Procfile` runs uvicorn with `$PORT`, so the service will listen on Railway’s assigned port.
+
+### 4. Point the mobile app at Railway
+
+In the Flutter app, set the **Server URL** (in-app settings or `api_config.dart`) to your Railway API URL, e.g. `https://your-api.up.railway.app`. No port needed if you use the generated HTTPS domain.
+
+### Env vars summary (API service on Railway)
+
+| Variable        | Required | Example / note                          |
+|-----------------|----------|-----------------------------------------|
+| `MONGODB_URI`   | Yes      | Railway MongoDB URL or Atlas connection string |
+| `DATABASE_NAME` | No       | `speech_parallel` (default)             |
+| `CORS_ORIGINS`  | No       | `*` or comma-separated origins          |
+
+Optional: use **Railway CLI** (`railway link`, `railway up`) to deploy from the `backend` directory instead of GitHub.
+
+**Option A – MongoDB on Railway**
+
+1. In the same project: **New** → **Database** → **Add MongoDB** (or **Plugin** → MongoDB).
+2. After it’s created, open the MongoDB service → **Variables** (or **Connect**) and copy the connection URL (often `MONGO_URL` or similar).
+3. In your **API service** → **Variables**: add  
+   `MONGODB_URI` = that URL (e.g. `mongodb://mongo:27017` if Railway gives a private hostname, or the full URL with user/password if provided).  
+   Also set:
+   - `DATABASE_NAME` = `speech_parallel`
+   - `CORS_ORIGINS` = `*` (or your app’s origins, e.g. `https://your-app.vercel.app` if you add a web client later).
+
+**Option B – MongoDB Atlas**
+
+1. Create a cluster at [mongodb.com/cloud/atlas](https://www.mongodb.com/cloud/atlas), get the connection string.
+2. In the **API service** → **Variables**:  
+   `MONGODB_URI` = your Atlas connection string (e.g. `mongodb+srv://user:pass@cluster.mongodb.net/`).  
+   Set `DATABASE_NAME` = `speech_parallel` and `CORS_ORIGINS` as above.
+
+### 3. Public URL and port
+
+1. API service → **Settings** → **Networking** → **Generate Domain** (e.g. `your-api.up.railway.app`).
+2. The `Procfile` runs uvicorn with `$PORT`, so the service will listen on Railway’s assigned port.
 
 ### 4. Point the mobile app at Railway
 

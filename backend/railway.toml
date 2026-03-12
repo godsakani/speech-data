@@ -1,8 +1,0 @@
-# Railway: deploy from backend/ (set Root Directory to "backend" if repo is project root).
-[build]
-builder = "docker"
-dockerfilePath = "Dockerfile"
-
-[deploy]
-restartPolicyType = "on_failure"
-restartPolicyMaxRetries = 3
