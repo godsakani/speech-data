@@ -1,25 +1,31 @@
-import 'dart:io';
-
-import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 const String _keyBaseUrl = 'api_base_url';
 
-const String kBaseUrlEmulator = 'http://10.0.2.2:8000';
-const String kBaseUrlRealDevice = 'http://192.168.1.1:8000';
+/// Production backend on Railway. Only this URL is used unless overridden in Settings.
+const String kBaseUrlProduction =
+    'https://speech-data-production.up.railway.app';
 
-/// Resolved base URL (set after [initApiConfig]).
-String kBaseUrl = kBaseUrlEmulator;
+/// Resolved base URL (set after [initApiConfig]). Defaults to production.
+String kBaseUrl = kBaseUrlProduction;
+
+/// True if [url] looks like a local/dev URL (not production).
+bool _isLocalUrl(String url) {
+  final u = url.trim().toLowerCase();
+  return u.startsWith('http://192.168.') ||
+      u.startsWith('http://10.') ||
+      u.startsWith('http://localhost') ||
+      u.startsWith('http://127.0.0.1');
+}
 
 /// Call before runApp() so the app uses the correct backend URL.
-/// Order: 1) Saved URL in app, 2) --dart-define=BASE_URL=..., 3) Emulator vs device, 4) Default.
+/// Uses: 1) URL saved in Settings (if set and not local), 2) Production only.
 Future<void> initApiConfig() async {
   final prefs = await SharedPreferences.getInstance();
 
-  // 1) URL saved in app (Settings → Server URL)
   final saved = prefs.getString(_keyBaseUrl);
-  if (saved != null && saved.trim().isNotEmpty) {
+  if (saved != null && saved.trim().isNotEmpty && !_isLocalUrl(saved)) {
     kBaseUrl = saved.trim();
     if (kDebugMode) {
       debugPrint('[SpeechAPI] Using saved base URL: $kBaseUrl');
@@ -27,33 +33,15 @@ Future<void> initApiConfig() async {
     return;
   }
 
-  // 2) Passed at run: flutter run --dart-define=BASE_URL=http://192.168.1.5:8000
-  const fromEnv = String.fromEnvironment(
-    'BASE_URL',
-    defaultValue: '',
-  );
-  if (fromEnv.isNotEmpty) {
-    kBaseUrl = fromEnv;
-    if (kDebugMode) {
-      debugPrint('[SpeechAPI] Using BASE_URL from dart-define: $kBaseUrl');
-    }
-    return;
+  // Clear any saved local URL so we never use it again
+  if (saved != null && _isLocalUrl(saved)) {
+    await prefs.remove(_keyBaseUrl);
   }
 
-  // 3) Auto-detect: emulator → 10.0.2.2, real device → kBaseUrlRealDevice
-  if (Platform.isAndroid) {
-    final deviceInfo = DeviceInfoPlugin();
-    final android = await deviceInfo.androidInfo;
-    final isEmulator = !android.isPhysicalDevice;
-    kBaseUrl = isEmulator ? kBaseUrlEmulator : kBaseUrlRealDevice;
-    if (kDebugMode) {
-      debugPrint('[SpeechAPI] Android ${isEmulator ? "emulator" : "device"}: $kBaseUrl');
-    }
-    return;
+  kBaseUrl = kBaseUrlProduction;
+  if (kDebugMode) {
+    debugPrint('[SpeechAPI] Using production base URL: $kBaseUrl');
   }
-
-  // 4) iOS / other: default emulator URL (or use dart-define / in-app URL)
-  kBaseUrl = kBaseUrlEmulator;
 }
 
 /// Save server URL from in-app Settings. Restart app or call [initApiConfig] again to apply.
@@ -71,7 +59,7 @@ Future<String?> getSavedBaseUrl() async {
   return prefs.getString(_keyBaseUrl);
 }
 
-/// Clear saved URL and revert to auto/dart-define logic on next launch.
+/// Clear saved URL and revert to production on next launch.
 Future<void> clearSavedBaseUrl() async {
   final prefs = await SharedPreferences.getInstance();
   await prefs.remove(_keyBaseUrl);

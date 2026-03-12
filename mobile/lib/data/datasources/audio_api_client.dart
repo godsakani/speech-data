@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
@@ -79,6 +80,19 @@ class AudioApiClient {
   /// Returns the URL to stream English audio (for playback).
   String englishAudioUrl(String id) => '$kBaseUrl/api/audio/$id/english';
 
+  /// Returns the URL to stream submitted Swahili audio (for playback).
+  String swahiliAudioUrl(String id) => '$kBaseUrl/api/audio/$id/swahili';
+
+  /// Fetches audio bytes from URL (avoids Android MediaPlayer issues with streaming).
+  Future<Uint8List> getAudioBytes(String url) async {
+    _log('GET $url (bytes)');
+    final response = await _dio.get<Uint8List>(
+      url,
+      options: Options(responseType: ResponseType.bytes),
+    );
+    return response.data!;
+  }
+
   Future<SpeechStats> getStats() async {
     _log('GET /api/audio/stats');
     try {
@@ -98,7 +112,7 @@ class AudioApiClient {
   Future<void> submitSwahili(String id, File wavFile) async {
     _log('POST /api/audio/$id/swahili');
     try {
-      final response = await _dio.post<Map<String, dynamic>>(
+      await _dio.post<Map<String, dynamic>>(
         '/api/audio/$id/swahili',
         data: FormData.fromMap({
           'file': await MultipartFile.fromFile(
@@ -107,7 +121,30 @@ class AudioApiClient {
           ),
         }),
       );
-      _log('Response: status=${response.statusCode}');
+      _log('Response: status=200');
+    } catch (e, stack) {
+      _log('Error: $e');
+      if (kDebugMode) {
+        debugPrint(stack.toString());
+      }
+      rethrow;
+    }
+  }
+
+  /// Replace existing Swahili (resubmit). Use when item is already submitted.
+  Future<void> replaceSwahili(String id, File wavFile) async {
+    _log('PUT /api/audio/$id/swahili');
+    try {
+      await _dio.put<Map<String, dynamic>>(
+        '/api/audio/$id/swahili',
+        data: FormData.fromMap({
+          'file': await MultipartFile.fromFile(
+            wavFile.path,
+            filename: 'swahili.wav',
+          ),
+        }),
+      );
+      _log('Response: status=200');
     } catch (e, stack) {
       _log('Error: $e');
       if (kDebugMode) {

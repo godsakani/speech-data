@@ -435,7 +435,7 @@ class _RecordingsListTab extends StatelessWidget {
               child: _SpeechItemTile(
                 item: item,
                 onTap: () {
-                  Get.to(() => DetailScreen(itemId: item.id))?.then((_) {
+                  Get.to(() => DetailScreen(itemId: item.id, item: item))?.then((_) {
                     controller.load();
                   });
                 },

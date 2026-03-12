@@ -7,11 +7,13 @@ import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
 
 import '../../data/repositories/audio_repository.dart';
+import '../../domain/entities/speech_item.dart';
 
 class DetailScreen extends StatefulWidget {
   final String itemId;
+  final SpeechItem? item;
 
-  const DetailScreen({super.key, required this.itemId});
+  const DetailScreen({super.key, required this.itemId, this.item});
 
   @override
   State<DetailScreen> createState() => _DetailScreenState();
@@ -29,6 +31,7 @@ class _DetailScreenState extends State<DetailScreen> {
   bool _isRecording = false;
   bool _isPlayingEnglish = false;
   bool _isPlayingSwahili = false;
+  bool _isPlayingSubmittedSwahili = false;
   bool _isSubmitting = false;
   String? _submitError;
 
@@ -40,10 +43,13 @@ class _DetailScreenState extends State<DetailScreen> {
   }
 
   Future<void> _playEnglish() async {
-    final url = _repo.getEnglishAudioUrl(widget.itemId);
     setState(() => _isPlayingEnglish = true);
     try {
-      await _englishPlayer.play(UrlSource(url));
+      final bytes = await _repo.getEnglishAudioBytes(widget.itemId);
+      final dir = await getTemporaryDirectory();
+      final path = '${dir.path}/english_${widget.itemId}.wav';
+      await File(path).writeAsBytes(bytes);
+      await _englishPlayer.play(DeviceFileSource(path));
       await _englishPlayer.onPlayerComplete.first;
     } catch (_) {}
     if (mounted) {
@@ -99,6 +105,21 @@ class _DetailScreenState extends State<DetailScreen> {
     }
   }
 
+  Future<void> _playSubmittedSwahili() async {
+    setState(() => _isPlayingSubmittedSwahili = true);
+    try {
+      final bytes = await _repo.getSwahiliAudioBytes(widget.itemId);
+      final dir = await getTemporaryDirectory();
+      final path = '${dir.path}/swahili_submitted_${widget.itemId}.wav';
+      await File(path).writeAsBytes(bytes);
+      await _swahiliPlayer.play(DeviceFileSource(path));
+      await _swahiliPlayer.onPlayerComplete.first;
+    } catch (_) {}
+    if (mounted) {
+      setState(() => _isPlayingSubmittedSwahili = false);
+    }
+  }
+
   Future<void> _submit() async {
     if (_recordedPath == null || !_hasTestedPlayback) {
       Get.snackbar(
@@ -115,11 +136,25 @@ class _DetailScreenState extends State<DetailScreen> {
       _submitError = null;
     });
     try {
-      await _repo.submitSwahili(widget.itemId, file);
-      if (mounted) {
-        Get.snackbar('Success', 'Submitted successfully', snackPosition: SnackPosition.BOTTOM);
-        Get.back(result: true);
+      final isResubmit = widget.item?.isSubmitted ?? false;
+      if (isResubmit) {
+        await _repo.replaceSwahili(widget.itemId, file);
+      } else {
+        await _repo.submitSwahili(widget.itemId, file);
       }
+      if (!mounted) return;
+      final wasSubmitted = widget.item?.isSubmitted ?? false;
+      setState(() => _isSubmitting = false);
+      Get.snackbar(
+        'Success',
+        wasSubmitted ? 'Resubmitted successfully' : 'Submitted successfully',
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: Theme.of(context).colorScheme.primaryContainer,
+        colorText: Theme.of(context).colorScheme.onPrimaryContainer,
+        duration: const Duration(seconds: 2),
+      );
+      await Future.delayed(const Duration(milliseconds: 1500));
+      if (mounted) Get.back(result: true);
     } catch (e) {
       if (mounted) {
         setState(() {
@@ -136,9 +171,11 @@ class _DetailScreenState extends State<DetailScreen> {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
+    final isSubmitted = widget.item?.isSubmitted ?? false;
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Submit Swahili'),
+        title: Text(isSubmitted ? 'Recording detail' : 'Submit Swahili'),
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
@@ -174,11 +211,47 @@ class _DetailScreenState extends State<DetailScreen> {
                 ),
               ),
             ),
+            if (isSubmitted) ...[
+              const SizedBox(height: 16),
+              _StepCard(
+                step: 2,
+                title: 'Play submitted Swahili',
+                subtitle: 'Listen to your submitted recording',
+                child: FilledButton.tonal(
+                  onPressed: _isPlayingSubmittedSwahili ? null : _playSubmittedSwahili,
+                  style: FilledButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      if (_isPlayingSubmittedSwahili)
+                        SizedBox(
+                          width: 22,
+                          height: 22,
+                          child: CircularProgressIndicator.adaptive(
+                            strokeWidth: 2,
+                          ),
+                        )
+                      else
+                        Icon(Icons.play_circle_outline_rounded, color: colorScheme.onSurface),
+                      const SizedBox(width: 10),
+                      Text(
+                        _isPlayingSubmittedSwahili ? 'Playing…' : 'Play submitted Swahili',
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
             const SizedBox(height: 16),
             _StepCard(
-              step: 2,
-              title: 'Record Swahili',
-              subtitle: 'Record your translation',
+              step: isSubmitted ? 3 : 2,
+              title: isSubmitted ? 'Record new version' : 'Record Swahili',
+              subtitle: isSubmitted
+                  ? 'Record again to replace your submitted translation'
+                  : 'Record your translation',
               child: _isRecording
                   ? FilledButton.tonal(
                       onPressed: _stopRecording,
@@ -208,14 +281,16 @@ class _DetailScreenState extends State<DetailScreen> {
                         children: [
                           const Icon(Icons.mic_rounded),
                           const SizedBox(width: 10),
-                          Text(_recordedPath != null ? 'Re-record' : 'Record Swahili'),
+                          Text(_recordedPath != null
+                              ? 'Re-record'
+                              : (isSubmitted ? 'Record new version' : 'Record Swahili')),
                         ],
                       ),
                     ),
             ),
             const SizedBox(height: 16),
             _StepCard(
-              step: 3,
+              step: isSubmitted ? 4 : 3,
               title: 'Verify playback',
               subtitle: 'Play back your recording (required before submit)',
               child: Column(
@@ -305,15 +380,15 @@ class _DetailScreenState extends State<DetailScreen> {
               style: FilledButton.styleFrom(
                 padding: const EdgeInsets.symmetric(vertical: 18),
               ),
-              child:                   _isSubmitting
-                      ? SizedBox(
-                          height: 24,
-                          width: 24,
-                          child: CircularProgressIndicator.adaptive(
-                            strokeWidth: 2,
-                          ),
-                        )
-                  : const Text('Submit Swahili'),
+              child: _isSubmitting
+                  ? SizedBox(
+                      height: 24,
+                      width: 24,
+                      child: CircularProgressIndicator.adaptive(
+                        strokeWidth: 2,
+                      ),
+                    )
+                  : Text(isSubmitted ? 'Resubmit Swahili' : 'Submit Swahili'),
             ),
           ],
         ),

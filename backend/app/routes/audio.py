@@ -115,25 +115,36 @@ async def stream_english(id: str):
     )
 
 
-@router.post("/{id}/swahili")
-async def submit_swahili(id: str, file: UploadFile = File(...)):
-    """Upload Swahili .wav for this item; compute length, set status to submitted."""
+@router.get("/{id}/swahili")
+async def stream_swahili(id: str):
+    """Stream submitted Swahili .wav from GridFS for playback."""
     doc = await _get_doc(id)
-    if doc.get("status") == "submitted":
-        raise HTTPException(status_code=400, detail="Already submitted")
-    if not file.filename or not file.filename.lower().endswith(".wav"):
-        raise HTTPException(status_code=400, detail="Only .wav files allowed")
-    data = await file.read()
-    if not data:
-        raise HTTPException(status_code=400, detail="Empty file")
+    gridfs = get_gridfs()
+    file_id = doc.get("audio_swahili")
+    if not file_id:
+        raise HTTPException(status_code=404, detail="Swahili audio not found (not submitted yet)")
     try:
-        length_swahili = get_wav_duration_seconds(data)
+        grid_out = await gridfs.open_download_stream(file_id)
+        data = await grid_out.read()
+    except Exception:
+        raise HTTPException(status_code=404, detail="Audio file not found")
+    return StreamingResponse(
+        io.BytesIO(data),
+        media_type="audio/wav",
+        headers={"Content-Disposition": "inline; filename=swahili.wav"},
+    )
+
+
+async def _save_swahili_for_doc(doc: dict, file_data: bytes, filename: str) -> dict:
+    """Upload Swahili bytes to GridFS and return update payload."""
+    try:
+        length_swahili = get_wav_duration_seconds(file_data)
     except Exception:
         length_swahili = 0.0
     gridfs = get_gridfs()
     file_id = await gridfs.upload_from_stream(
-        file.filename or "swahili.wav",
-        io.BytesIO(data),
+        filename or "swahili.wav",
+        io.BytesIO(file_data),
         metadata={"language": "swahili"},
     )
     db = get_database()
@@ -147,4 +158,30 @@ async def submit_swahili(id: str, file: UploadFile = File(...)):
             }
         },
     )
-    return {"status": "submitted", "id": id}
+    return {"status": "submitted", "id": str(doc["_id"])}
+
+
+@router.put("/{id}/swahili")
+async def replace_swahili(id: str, file: UploadFile = File(...)):
+    """Replace existing Swahili .wav for this item (full overwrite). Use for resubmit."""
+    doc = await _get_doc(id)
+    if not file.filename or not file.filename.lower().endswith(".wav"):
+        raise HTTPException(status_code=400, detail="Only .wav files allowed")
+    data = await file.read()
+    if not data:
+        raise HTTPException(status_code=400, detail="Empty file")
+    return await _save_swahili_for_doc(doc, data, file.filename or "swahili.wav")
+
+
+@router.post("/{id}/swahili")
+async def submit_swahili(id: str, file: UploadFile = File(...)):
+    """Upload Swahili .wav for this item (first-time submit). Returns 400 if already submitted."""
+    doc = await _get_doc(id)
+    if doc.get("status") == "submitted":
+        raise HTTPException(status_code=400, detail="Already submitted. Use PUT /api/audio/{id}/swahili to replace.")
+    if not file.filename or not file.filename.lower().endswith(".wav"):
+        raise HTTPException(status_code=400, detail="Only .wav files allowed")
+    data = await file.read()
+    if not data:
+        raise HTTPException(status_code=400, detail="Empty file")
+    return await _save_swahili_for_doc(doc, data, file.filename or "swahili.wav")

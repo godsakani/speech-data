@@ -44,7 +44,8 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 - Bulk upload English .wav: `POST /api/audio/english/bulk` (multipart form, multiple files)  
 - List: `GET /api/audio?page=1&limit=20`  
 - Stream English: `GET /api/audio/{id}/english`  
-- Submit Swahili: `POST /api/audio/{id}/swahili` (multipart file)
+- Submit Swahili: `POST /api/audio/{id}/swahili` (multipart file; 400 if already submitted)
+- Replace Swahili (resubmit): `PUT /api/audio/{id}/swahili` (multipart file; full overwrite)
 
 ## Mobile app
 
@@ -60,7 +61,7 @@ flutter pub get
 flutter run
 ```
 
-**Base URL**: The app uses `http://10.0.2.2:8000` by default (Android emulator → host machine). For a **real device** (e.g. Infinix), set `kBaseUrl` in `mobile/lib/core/config/api_config.dart` to your PC’s LAN IP (e.g. `http://192.168.1.5:8000`). Run the backend with `--host 0.0.0.0` and use the same Wi‑Fi for phone and PC.
+**Base URL**: The app uses only the **production** backend at `https://speech-data-production.up.railway.app`. You can override it in-app via **Settings** → Server URL (e.g. for a different production URL). Any previously saved local URL is ignored and cleared.
 
 **API**: The app calls the same backend as in the docs (e.g. `GET /api/audio?page=1&limit=20`). The response `{ "items": [...], "total", "page", "limit" }` with each item `id`, `length_english`, `length_swahili`, `status` is parsed and shown in the Recordings list and Home progress.
 
