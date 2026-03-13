@@ -8,6 +8,7 @@ class SpeechItemResponse(BaseModel):
     length_english: float
     length_swahili: Optional[float] = None
     status: str  # "pending" | "submitted"
+    text_english: Optional[str] = None  # source sentence (null for legacy bulk-upload)
 
 
 class PaginatedListResponse(BaseModel):

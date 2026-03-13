@@ -42,7 +42,9 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
 - API docs: http://localhost:8000/docs  
 - Bulk upload English .wav: `POST /api/audio/english/bulk` (multipart form, multiple files)  
-- List: `GET /api/audio?page=1&limit=20`  
+- Create from text + WAV: `POST /api/audio/english/with-text` (multipart: `file`, `text_english`) — for script or client upload  
+- Create from text (backend TTS): `POST /api/audio/english/speak` (form: `text_english`) — generates English WAV, stores text + audio (requires pyttsx3)  
+- List: `GET /api/audio?page=1&limit=20` (items include optional `text_english`)  
 - Stream English: `GET /api/audio/{id}/english`  
 - Submit Swahili: `POST /api/audio/{id}/swahili` (multipart file; 400 if already submitted)
 - Replace Swahili (resubmit): `PUT /api/audio/{id}/swahili` (multipart file; full overwrite)
@@ -67,9 +69,11 @@ flutter run
 
 ### Flow
 
-1. **Splash** → Dashboard  
-2. **Dashboard**: Paginated list of speech items (id, length_english, status). Pull to refresh; tap “Load more” for next page. Tap an item → Detail.  
-3. **Detail**: Play English → Record Swahili → Play back to verify → Submit. Submit is enabled only after playback has been tested.
+1. **Splash** → Dashboard (tabs: Home | Record | Recordings).  
+2. **Home**: Progress (total / submitted / pending).  
+3. **Record**: Type an English sentence → “Generate & record” (backend TTS stores text + English WAV) → Detail to record Swahili; or pick a pending sentence from the list and open Detail.  
+4. **Recordings**: Paginated list (shows `text_english` when present). Tap item → Detail.  
+5. **Detail**: Play English → Record Swahili → Play back to verify → Submit (or Resubmit). Play submitted Swahili when already submitted.
 
 ## MongoDB schema (collection: `speech_parallel`)
 
@@ -81,6 +85,26 @@ flutter run
 | `length_english`| float     | Duration in seconds                  |
 | `length_swahili`| float?    | Set on submit                        |
 | `status`        | string    | `"pending"` \| `"submitted"`         |
+| `text_english`  | string?   | Source English sentence (optional; set by script or speak endpoint) |
+
+### Generate English WAVs from text (script)
+
+For crowdsourcing: generate many English sentences as WAVs and upload so contributors only record Swahili.
+
+```bash
+cd scripts
+python -m venv venv
+# Windows: venv\Scripts\activate
+# macOS/Linux: source venv/bin/activate
+pip install -r requirements.txt
+set BASE_URL=http://localhost:8000
+python generate_english_wavs.py sentences.example.txt
+```
+
+- Input: text file with one English sentence per line.  
+- Script uses Coqui TTS to generate a WAV per line and uploads each via `POST /api/audio/english/with-text`.  
+- Use `--no-upload` to only write WAVs to `output_wavs/`.  
+- Use `--base-url` or env `BASE_URL` to point to your API.
 
 ## Run backend with Docker (API + MongoDB)
 

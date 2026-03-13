@@ -1,12 +1,14 @@
 """Audio API routes: bulk upload, list, stream, submit Swahili."""
+import asyncio
 import io
-from fastapi import APIRouter, UploadFile, File, HTTPException
+from fastapi import APIRouter, UploadFile, File, Form, HTTPException
 from fastapi.responses import StreamingResponse
 from bson import ObjectId
 
 from app.db import get_database, get_gridfs
 from app.models import SpeechItemResponse, PaginatedListResponse, BulkUploadResponse, AudioStatsResponse
 from app.services.audio_duration import get_wav_duration_seconds
+from app.services.tts_english import generate_wav_from_text
 
 router = APIRouter(prefix="/api/audio", tags=["audio"])
 COLLECTION = "speech_parallel"
@@ -71,6 +73,75 @@ async def bulk_upload_english(files: list[UploadFile] = File(...)):
     return BulkUploadResponse(created_ids=created_ids)
 
 
+@router.post("/english/with-text", response_model=dict)
+async def create_english_with_text(
+    file: UploadFile = File(...),
+    text_english: str = Form(""),
+):
+    """Create one item: upload English WAV + optional source text. Used by script and client upload."""
+    if not file.filename or not file.filename.lower().endswith(".wav"):
+        raise HTTPException(status_code=400, detail="Only .wav files allowed")
+    data = await file.read()
+    if not data:
+        raise HTTPException(status_code=400, detail="Empty file")
+    try:
+        length_english = get_wav_duration_seconds(data)
+    except Exception:
+        length_english = 0.0
+    db = get_database()
+    gridfs = get_gridfs()
+    file_id = await gridfs.upload_from_stream(
+        file.filename or "audio.wav",
+        io.BytesIO(data),
+        metadata={"language": "english"},
+    )
+    doc = {
+        "audio_english": file_id,
+        "audio_swahili": None,
+        "length_english": length_english,
+        "length_swahili": None,
+        "status": "pending",
+        "text_english": text_english.strip() or None,
+    }
+    result = await db[COLLECTION].insert_one(doc)
+    return {"id": _serialize_id(result.inserted_id)}
+
+
+@router.post("/english/speak", response_model=dict)
+async def create_english_speak(text_english: str = Form(..., min_length=1)):
+    """Create one item from English text: backend TTS generates WAV, stores text + audio. Requires pyttsx3."""
+    text_english = text_english.strip()
+    if not text_english:
+        raise HTTPException(status_code=400, detail="text_english is required")
+    try:
+        wav_data = await asyncio.to_thread(generate_wav_from_text, text_english)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except RuntimeError as e:
+        raise HTTPException(status_code=503, detail=str(e)) from e
+    try:
+        length_english = get_wav_duration_seconds(wav_data)
+    except Exception:
+        length_english = 0.0
+    db = get_database()
+    gridfs = get_gridfs()
+    file_id = await gridfs.upload_from_stream(
+        "english.wav",
+        io.BytesIO(wav_data),
+        metadata={"language": "english"},
+    )
+    doc = {
+        "audio_english": file_id,
+        "audio_swahili": None,
+        "length_english": length_english,
+        "length_swahili": None,
+        "status": "pending",
+        "text_english": text_english,
+    }
+    result = await db[COLLECTION].insert_one(doc)
+    return {"id": _serialize_id(result.inserted_id)}
+
+
 @router.get("", response_model=PaginatedListResponse)
 async def list_audio(page: int = 1, limit: int = 20):
     """Paginated list of speech items."""
@@ -90,6 +161,7 @@ async def list_audio(page: int = 1, limit: int = 20):
                 length_english=doc.get("length_english", 0),
                 length_swahili=doc.get("length_swahili"),
                 status=doc.get("status", "pending"),
+                text_english=doc.get("text_english"),
             )
         )
     return PaginatedListResponse(items=items, total=total, page=page, limit=limit)
