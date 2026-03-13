@@ -6,6 +6,7 @@ import '../../data/datasources/audio_api_client.dart';
 import '../../domain/entities/speech_item.dart';
 import '../controllers/dashboard_controller.dart';
 import '../detail/detail_screen.dart';
+import '../record/record_screen.dart';
 
 class DashboardScreen extends GetView<DashboardController> {
   const DashboardScreen({super.key});
@@ -59,7 +60,8 @@ class DashboardScreen extends GetView<DashboardController> {
   @override
   Widget build(BuildContext context) {
     return Obx(() {
-      final title = controller.currentTabIndex.value == 0 ? 'Home' : 'Recordings';
+      final titles = ['Home', 'Record', 'Recordings'];
+      final title = titles[controller.currentTabIndex.value.clamp(0, 2)];
       return Scaffold(
         appBar: AppBar(
           title: Text(title),
@@ -73,9 +75,10 @@ class DashboardScreen extends GetView<DashboardController> {
           ],
         ),
         body: IndexedStack(
-          index: controller.currentTabIndex.value,
+          index: controller.currentTabIndex.value.clamp(0, 2),
           children: [
             _HomeTab(controller: controller),
+            const RecordScreen(),
             _RecordingsListTab(controller: controller),
           ],
         ),
@@ -90,13 +93,18 @@ class DashboardScreen extends GetView<DashboardController> {
             ],
           ),
           child: NavigationBar(
-            selectedIndex: controller.currentTabIndex.value,
+            selectedIndex: controller.currentTabIndex.value.clamp(0, 2),
             onDestinationSelected: controller.setTab,
             destinations: const [
               NavigationDestination(
                 icon: Icon(Icons.home_outlined),
                 selectedIcon: Icon(Icons.home_rounded),
                 label: 'Home',
+              ),
+              NavigationDestination(
+                icon: Icon(Icons.mic_none_outlined),
+                selectedIcon: Icon(Icons.mic_rounded),
+                label: 'Record',
               ),
               NavigationDestination(
                 icon: Icon(Icons.queue_music_outlined),
@@ -500,9 +508,11 @@ class _SpeechItemTile extends StatelessWidget {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
-                      item.id.length > 10
-                          ? '${item.id.substring(0, 10)}…'
-                          : item.id,
+                      item.textEnglish != null && item.textEnglish!.isNotEmpty
+                          ? (item.textEnglish!.length > 40
+                                ? '${item.textEnglish!.substring(0, 40)}…'
+                                : item.textEnglish!)
+                          : (item.id.length > 10 ? '${item.id.substring(0, 10)}…' : item.id),
                       style: theme.textTheme.titleSmall?.copyWith(
                         fontWeight: FontWeight.w600,
                       ),

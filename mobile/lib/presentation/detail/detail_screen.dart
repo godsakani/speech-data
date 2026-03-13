@@ -12,8 +12,10 @@ import '../../domain/entities/speech_item.dart';
 class DetailScreen extends StatefulWidget {
   final String itemId;
   final SpeechItem? item;
+  /// When opening after "Type English" + speak, pass the text so it can be shown before list refresh.
+  final String? initialTextEnglish;
 
-  const DetailScreen({super.key, required this.itemId, this.item});
+  const DetailScreen({super.key, required this.itemId, this.item, this.initialTextEnglish});
 
   @override
   State<DetailScreen> createState() => _DetailScreenState();
@@ -182,6 +184,18 @@ class _DetailScreenState extends State<DetailScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            if ((widget.item?.textEnglish ?? widget.initialTextEnglish) != null &&
+                (widget.item?.textEnglish ?? widget.initialTextEnglish)!.isNotEmpty) ...[
+              Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: Text(
+                  (widget.item?.textEnglish ?? widget.initialTextEnglish)!,
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+            ],
             _StepCard(
               step: 1,
               title: 'Play English',

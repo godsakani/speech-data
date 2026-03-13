@@ -93,6 +93,18 @@ class AudioApiClient {
     return response.data!;
   }
 
+  /// Create item from English text: backend TTS generates WAV, stores text + audio. Returns new item id.
+  Future<String> createFromTextAndSpeak(String textEnglish) async {
+    _log('POST /api/audio/english/speak');
+    final response = await _dio.post<Map<String, dynamic>>(
+      '/api/audio/english/speak',
+      data: FormData.fromMap({'text_english': textEnglish.trim()}),
+    );
+    final id = response.data?['id'] as String?;
+    if (id == null) throw StateError('No id in response');
+    return id;
+  }
+
   Future<SpeechStats> getStats() async {
     _log('GET /api/audio/stats');
     try {

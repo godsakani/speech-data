@@ -34,4 +34,8 @@ class AudioRepository {
   /// Replace existing Swahili (resubmit). Use when item is already submitted.
   Future<void> replaceSwahili(String id, File wavFile) =>
       _client.replaceSwahili(id, wavFile);
+
+  /// Create item from typed English (backend TTS). Returns new item id.
+  Future<String> createFromTextAndSpeak(String textEnglish) =>
+      _client.createFromTextAndSpeak(textEnglish);
 }

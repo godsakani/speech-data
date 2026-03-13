@@ -9,7 +9,7 @@ class DashboardController extends GetxController {
 
   final AudioRepository _repo;
 
-  // Tab index: 0 = Home (progress), 1 = Recordings (list)
+  // Tab index: 0 = Home, 1 = Record, 2 = Recordings (list)
   final RxInt currentTabIndex = 0.obs;
 
   // List tab
@@ -84,6 +84,8 @@ class DashboardController extends GetxController {
     currentTabIndex.value = index;
     if (index == 0) {
       loadStats();
+    } else if (index == 1 && items.isEmpty) {
+      load();
     }
   }
 }
