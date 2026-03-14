@@ -47,8 +47,8 @@ def main() -> None:
     parser.add_argument(
         "--format",
         choices=("json", "csv"),
-        default="json",
-        help="Metadata format: json or csv",
+        default="csv",
+        help="Metadata format: json or csv (default: csv)",
     )
     parser.add_argument(
         "--limit",
@@ -129,8 +129,12 @@ def main() -> None:
             except Exception as e:
                 print(f"Warning: could not fetch Swahili audio for {id_}: {e}", file=sys.stderr)
 
+        english_audio_file = f"{sid}_english.wav"
+        swahili_audio_file = f"{sid}_swahili.wav" if has_swahili else ""
         metadata_rows.append({
             "id": id_,
+            "english_audio_file": english_audio_file,
+            "swahili_audio_file": swahili_audio_file,
             "length_english": length_english,
             "length_swahili": length_swahili,
             "text_english": text_english or "",
@@ -150,7 +154,8 @@ def main() -> None:
                 w = csv.DictWriter(
                     f,
                     fieldnames=[
-                        "id", "length_english", "length_swahili", "text_english",
+                        "id", "english_audio_file", "swahili_audio_file",
+                        "length_english", "length_swahili", "text_english",
                         "status", "has_english_audio", "has_swahili_audio",
                     ],
                 )

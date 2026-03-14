@@ -1,5 +1,6 @@
 """Audio API routes: bulk upload, list, stream, submit Swahili."""
 import asyncio
+import csv
 import io
 import json
 import zipfile
@@ -206,8 +207,12 @@ async def export_dataset(limit: int = 500):
                     zf.writestr(f"{id_str}_swahili.wav", sw_data)
                 except Exception:
                     has_swahili = False
+            english_audio_file = f"{id_str}_english.wav"
+            swahili_audio_file = f"{id_str}_swahili.wav" if has_swahili else ""
             metadata_list.append({
                 "id": id_str,
+                "english_audio_file": english_audio_file,
+                "swahili_audio_file": swahili_audio_file,
                 "length_english": length_english,
                 "length_swahili": length_swahili,
                 "text_english": text_english or "",
@@ -216,6 +221,20 @@ async def export_dataset(limit: int = 500):
                 "has_swahili_audio": has_swahili,
             })
         zf.writestr("metadata.json", json.dumps(metadata_list, indent=2))
+        # CSV with same columns for spreadsheet use
+        csv_buffer = io.StringIO()
+        if metadata_list:
+            writer = csv.DictWriter(
+                csv_buffer,
+                fieldnames=[
+                    "id", "english_audio_file", "swahili_audio_file",
+                    "length_english", "length_swahili", "text_english",
+                    "status", "has_english_audio", "has_swahili_audio",
+                ],
+            )
+            writer.writeheader()
+            writer.writerows(metadata_list)
+        zf.writestr("metadata.csv", csv_buffer.getvalue())
     buffer.seek(0)
     return StreamingResponse(
         buffer,
