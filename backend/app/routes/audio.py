@@ -1,6 +1,8 @@
 """Audio API routes: bulk upload, list, stream, submit Swahili."""
 import asyncio
 import io
+import json
+import zipfile
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException
 from fastapi.responses import StreamingResponse
 from bson import ObjectId
@@ -165,6 +167,61 @@ async def list_audio(page: int = 1, limit: int = 20):
             )
         )
     return PaginatedListResponse(items=items, total=total, page=page, limit=limit)
+
+
+EXPORT_MAX_LIMIT = 500
+
+
+@router.get("/export")
+async def export_dataset(limit: int = 500):
+    """Export dataset as ZIP: English/Swahili WAVs + metadata.json. Optional ?limit= (max 500)."""
+    if limit < 1 or limit > EXPORT_MAX_LIMIT:
+        limit = EXPORT_MAX_LIMIT
+    db = get_database()
+    gridfs = get_gridfs()
+    cursor = db[COLLECTION].find({}).sort("_id", 1).limit(limit)
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zf:
+        metadata_list: list[dict] = []
+        async for doc in cursor:
+            id_str = _serialize_id(doc["_id"])
+            length_english = doc.get("length_english")
+            length_swahili = doc.get("length_swahili")
+            text_english = doc.get("text_english")
+            status = doc.get("status", "pending")
+            has_swahili = bool(doc.get("audio_swahili"))
+
+            # English WAV
+            try:
+                grid_out = await gridfs.open_download_stream(doc["audio_english"])
+                en_data = await grid_out.read()
+                zf.writestr(f"{id_str}_english.wav", en_data)
+            except Exception:
+                pass
+            # Swahili WAV when submitted
+            if has_swahili:
+                try:
+                    grid_out = await gridfs.open_download_stream(doc["audio_swahili"])
+                    sw_data = await grid_out.read()
+                    zf.writestr(f"{id_str}_swahili.wav", sw_data)
+                except Exception:
+                    has_swahili = False
+            metadata_list.append({
+                "id": id_str,
+                "length_english": length_english,
+                "length_swahili": length_swahili,
+                "text_english": text_english or "",
+                "status": status,
+                "has_english_audio": True,
+                "has_swahili_audio": has_swahili,
+            })
+        zf.writestr("metadata.json", json.dumps(metadata_list, indent=2))
+    buffer.seek(0)
+    return StreamingResponse(
+        buffer,
+        media_type="application/zip",
+        headers={"Content-Disposition": 'attachment; filename="speech_export.zip"'},
+    )
 
 
 @router.get("/{id}/english")

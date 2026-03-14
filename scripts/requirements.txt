@@ -1,3 +1,6 @@
 # For generate_english_wavs.py: Coqui TTS + upload
 TTS>=0.22.0
 httpx>=0.27.0
+
+# For export_dataset.py: export via API
+requests>=2.28.0
