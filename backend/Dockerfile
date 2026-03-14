@@ -3,8 +3,8 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-# Install system TTS engine required by pyttsx3 on Linux (eSpeak)
-RUN apt-get update && apt-get install -y --no-install-recommends espeak \
+# ffmpeg for pydub (mp3 -> wav). Optional: espeak for pyttsx3 fallback.
+RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
 # Install dependencies
