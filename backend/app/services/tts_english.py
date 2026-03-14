@@ -4,10 +4,10 @@ from pathlib import Path
 
 
 def _set_english_voice(engine) -> None:
-    """Set engine to an available English voice (avoids gmw/en etc. not in minimal espeak)."""
+    """Set engine to an available English voice (avoids gmw/en which often fails in containers)."""
     voices = engine.getProperty("voices") or []
-    # Prefer voice ids that are standard English in espeak: en, en-us, en-gb, en-us, default
-    for preferred in ("en-us", "en-gb", "en", "english", "en-us"):
+    # Prefer voice ids that are standard English in classic espeak: en-us, en-gb, en
+    for preferred in ("en-us", "en-gb", "en", "english"):
         for v in voices:
             vid = (getattr(v, "id", None) or "").lower()
             if vid == preferred or vid.startswith(preferred + "/") or f"/{preferred}" in vid:
@@ -16,7 +16,7 @@ def _set_english_voice(engine) -> None:
                     return
                 except Exception:
                     continue
-    # Fallback: use first voice that has 'en' in id (e.g. en-us, en-gb) but not gmw/en
+    # Fallback: any voice that has 'en' but not gmw (gmw/en fails with return code -1 in many setups)
     for v in voices:
         vid = (getattr(v, "id", None) or "").lower()
         if "en" in vid and "gmw" not in vid:
@@ -25,12 +25,20 @@ def _set_english_voice(engine) -> None:
                 return
             except Exception:
                 continue
-    # Last resort: use first available voice to avoid broken default (e.g. gmw/en)
-    if voices:
-        try:
-            engine.setProperty("voice", voices[0].id)
-        except Exception:
-            pass
+    # Last resort: any voice that is NOT gmw
+    for v in voices:
+        vid = (getattr(v, "id", None) or "").lower()
+        if "gmw" not in vid:
+            try:
+                engine.setProperty("voice", v.id)
+                return
+            except Exception:
+                continue
+    # Only gmw voices available (e.g. espeak-ng with no en-us); raise so we don't use broken default
+    raise RuntimeError(
+        "No working TTS voice found (gmw/en fails in this environment). "
+        "Ensure the Docker image installs 'espeak' so en-us/en-gb are available."
+    )
 
 
 def generate_wav_from_text(text: str) -> bytes:
