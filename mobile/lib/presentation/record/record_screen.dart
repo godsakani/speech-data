@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
@@ -47,9 +48,12 @@ class _RecordScreenState extends State<RecordScreen> {
       ctrl.loadStats();
     } catch (e) {
       if (mounted) {
+        final is404 = e is DioException && e.response?.statusCode == 404;
         setState(() {
           _speakLoading = false;
-          _speakError = e.toString();
+          _speakError = is404
+              ? 'Backend doesn\'t support "Generate from text" yet. Redeploy your backend (Railway) so the /api/audio/english/speak endpoint is available.'
+              : e.toString();
         });
       }
     }
